@@ -1,0 +1,1557 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>三消英雄</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  background:#0a0a1a;font-family:'Microsoft YaHei','PingFang SC',sans-serif;
+  overflow:hidden;height:100vh;user-select:none;-webkit-user-select:none;
+  display:flex;justify-content:center;align-items:center;
+}
+#game-container{
+  width:480px;height:100vh;max-height:820px;
+  display:flex;flex-direction:column;
+  background:linear-gradient(180deg,#1a1a3e 0%,#0d0d2b 100%);
+  border-left:2px solid #3a3a6e;border-right:2px solid #3a3a6e;
+  position:relative;
+}
+
+/* 顶部信息栏 */
+#top-bar{
+  padding:8px 12px;display:flex;justify-content:space-between;align-items:center;
+  background:rgba(0,0,0,0.3);border-bottom:1px solid #2a2a5e;
+  min-height:90px;
+}
+#stage-info{color:#fff;font-size:13px;line-height:1.6}
+#stage-info .name{font-size:20px;font-weight:bold;color:#ffd700}
+#stage-info .type{font-size:11px;color:#ff9800}
+#timer-area{text-align:right}
+#timer-display{
+  font-size:42px;font-weight:bold;color:#ffd700;
+  text-shadow:0 0 16px rgba(255,215,0,0.6);line-height:1;
+  transition:color 0.2s;
+}
+#timer-display.urgent{color:#ff3333;text-shadow:0 0 16px rgba(255,0,0,0.8);animation:pulse 0.35s infinite}
+#timer-display.fever{color:#00ffff;text-shadow:0 0 16px rgba(0,255,255,0.8)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+@keyframes screenShake{
+  0%,100%{transform:translate(0,0)}
+  12.5%{transform:translate(-6px,3px)}
+  25%{transform:translate(6px,-3px)}
+  37.5%{transform:translate(-4px,-2px)}
+  50%{transform:translate(4px,2px)}
+  62.5%{transform:translate(-2px,1px)}
+  75%{transform:translate(2px,-1px)}
+  87.5%{transform:translate(-8px,4px)}
+}
+#game-container.shake{animation:screenShake 0.5s ease-out}
+#attack-flash{
+  position:fixed;top:0;left:0;right:0;bottom:0;
+  background:rgba(255,0,0,0.35);pointer-events:none;z-index:300;
+  opacity:0;transition:opacity 0.08s;
+}
+#attack-flash.active{opacity:1}
+#timer-label{font-size:10px;color:#888;margin-top:2px}
+#combo-display{
+  font-size:18px;color:#ff9800;font-weight:bold;min-height:22px;
+  transition:all 0.12s;
+}
+
+/* 敌人区域 */
+#enemy-area{
+  flex:1;position:relative;
+  background:radial-gradient(ellipse at center,#1a0a0a 0%,#0a0505 60%,#000 100%);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  min-height:140px;
+}
+#enemy-sprite{
+  width:100px;height:100px;border-radius:50%;
+  background:radial-gradient(circle,#ff4444 0%,#880000 100%);
+  box-shadow:0 0 40px rgba(255,0,0,0.4),0 0 80px rgba(255,0,0,0.2);
+  display:flex;align-items:center;justify-content:center;
+  font-size:36px;font-weight:bold;color:#fff;
+  transition:transform 0.1s;
+}
+#enemy-sprite.boss{
+  width:130px;height:130px;
+  background:radial-gradient(circle,#ff0000 0%,#440000 100%);
+  box-shadow:0 0 60px rgba(255,0,0,0.6),0 0 120px rgba(255,0,0,0.3);
+  font-size:48px;
+}
+#enemy-sprite.hit{transform:scale(1.1)}
+#enemy-name{
+  color:#ff6666;font-size:16px;font-weight:bold;margin-top:6px;
+  text-shadow:0 0 8px rgba(255,0,0,0.5);
+}
+#hp-bar-outer{
+  width:80%;max-width:360px;height:18px;background:#333;
+  border:2px solid #666;border-radius:9px;overflow:hidden;margin-top:6px;
+}
+#hp-bar-inner{
+  height:100%;background:linear-gradient(90deg,#ff0000,#ff4444,#ff6666);
+  transition:width 0.25s;border-radius:7px;
+}
+#hp-text{font-size:10px;color:#ccc;margin-top:2px}
+
+/* 伤害飘字 */
+.damage-float{
+  position:absolute;color:#ffdd00;font-size:24px;font-weight:bold;
+  pointer-events:none;animation:floatUp 0.9s forwards;z-index:10;
+}
+@keyframes floatUp{0%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-55px)}}
+
+/* 棋盘区域 */
+#board-area{
+  height:380px;background:linear-gradient(180deg,#1a1a2e 0%,#0f0f23 100%);
+  border-top:2px solid #3a3a6e;display:flex;
+  align-items:center;justify-content:center;position:relative;
+}
+canvas{border-radius:6px;cursor:pointer;background:rgba(0,0,0,0.35)}
+
+/* 底部状态栏 */
+#bottom-bar{
+  padding:6px 12px;display:flex;gap:16px;justify-content:center;
+  background:rgba(0,0,0,0.3);border-top:1px solid #2a2a5e;
+  font-size:11px;color:#999;min-height:32px;align-items:center;
+}
+#bottom-bar span{color:#ffd700}
+
+/* 覆盖层 */
+.overlay{
+  position:fixed;top:0;left:0;right:0;bottom:0;
+  background:rgba(0,0,0,0.9);display:none;flex-direction:column;
+  align-items:center;justify-content:center;z-index:100;
+}
+.overlay h2{margin-bottom:6px;font-size:26px;color:#ffd700}
+.overlay .sub{color:#bbb;font-size:13px;margin-bottom:14px}
+.overlay .info{color:#aaa;font-size:12px;margin-bottom:14px;text-align:center;line-height:1.7}
+.overlay button,.choice-btn{
+  padding:12px 28px;font-size:14px;background:#2a2a4e;border:2px solid #555;
+  border-radius:8px;cursor:pointer;color:#fff;font-weight:bold;
+  transition:all 0.12s;margin:4px;min-width:120px;
+}
+.overlay button:hover,.choice-btn:hover{
+  background:#3a3a6e;border-color:#ffd700;box-shadow:0 0 14px rgba(255,215,0,0.3);
+}
+.choice-btn.buff-btn{background:#2a2a00;border-color:#ffd700;width:140px}
+.choice-btn.buff-btn:hover{background:#4a3a00}
+.choice-btn.relic-btn{background:#2a0a2a;border-color:#ff9800;width:140px}
+.choice-btn.relic-btn:hover{background:#4a1a4a}
+.choice-group{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:460px;margin-bottom:8px}
+.choice-btn .desc{font-size:10px;color:#aaa;margin-top:3px;display:block;font-weight:normal}
+
+/* Toast */
+.toast{
+  position:fixed;top:12px;left:50%;transform:translateX(-50%);
+  background:rgba(0,0,0,0.92);color:#ffd700;padding:6px 18px;border-radius:14px;
+  font-size:12px;z-index:200;animation:fadeInOut 1.6s forwards;pointer-events:none;
+}
+@keyframes fadeInOut{
+  0%{opacity:0;transform:translateX(-50%) translateY(-12px)}
+  10%{opacity:1;transform:translateX(-50%) translateY(0)}
+  70%{opacity:1}100%{opacity:0}
+}
+</style>
+</head>
+<body>
+
+<div id="attack-flash"></div>
+
+<div id="game-container">
+  <div id="top-bar">
+    <div id="stage-info">
+      <div class="name" id="stage-name">小怪1</div>
+      <div class="type" id="stage-type-badge"></div>
+      <div id="stage-num" style="color:#888;font-size:10px">第1/8关</div>
+      <div style="margin-top:4px">
+        <span style="color:#4f4;font-size:11px">HP:</span>
+        <span style="color:#4f4;font-weight:bold" id="player-hp-text">30/30</span>
+        <span style="color:#f66;font-size:10px;margin-left:8px">敌攻:</span>
+        <span style="color:#f66;font-weight:bold;font-size:10px" id="enemy-atk-text">0</span>
+      </div>
+    </div>
+    <div id="timer-area">
+      <div id="timer-display">3.0</div>
+      <div id="timer-label">剩余时间</div>
+      <div id="combo-display"></div>
+    </div>
+  </div>
+  <div id="enemy-area">
+    <div id="enemy-sprite"></div>
+    <div id="enemy-name"></div>
+    <div id="hp-bar-outer"><div id="hp-bar-inner" style="width:100%"></div></div>
+    <div id="hp-text">HP 100%</div>
+  </div>
+  <div id="board-area">
+    <canvas id="grid-canvas"></canvas>
+  </div>
+  <div id="bottom-bar">
+    <span>Base:<b id="stat-base">10</b></span>
+    <span>Mult:<b id="stat-mult">1.0</b></span>
+    <span>Flat:<b id="stat-flat">0</b></span>
+    <span>Time:<b id="stat-time">3.0s</b></span>
+    <span>Grid:<b id="stat-grid">5x5</b></span>
+  </div>
+</div>
+
+<!-- 开始 -->
+<div id="start-overlay" class="overlay" style="display:flex">
+  <h2>三消英雄</h2>
+  <div class="sub">v0.0.3</div>
+  <div class="info">
+    玩家 HP: 30 | 每关 3 秒限时<br>
+    时间结束敌人攻击,HP归零则失败<br>
+    4连/5连生成炸弹道具,点击引爆<br>
+    特殊方块(*)消除恢复 10 HP
+  </div>
+  <button onclick="beginRun()">开始游戏</button>
+</div>
+
+<!-- 胜利 -->
+<div id="win-overlay" class="overlay">
+  <h2 style="color:#4f4">战斗胜利!</h2>
+  <div class="info" id="win-info"></div>
+  <button onclick="proceedToRewards()">领取奖励</button>
+</div>
+
+<!-- 加成选择 -->
+<div id="buff-overlay" class="overlay">
+  <h2 style="color:#ffd700">选择加成</h2>
+  <div class="sub">3选1 - 永久修改玩家方块堆或全局变量</div>
+  <div class="choice-group" id="buff-choices"></div>
+</div>
+
+<!-- 圣遗物选择 -->
+<div id="relic-overlay" class="overlay">
+  <h2 style="color:#ff9800">选择圣遗物</h2>
+  <div class="sub">2选1 - 永久装配至背包</div>
+  <div class="choice-group" id="relic-choices"></div>
+</div>
+
+<!-- 通关 -->
+<div id="complete-overlay" class="overlay">
+  <h2 style="color:#ffd700">全部通关!</h2>
+  <div class="info" id="complete-info"></div>
+  <button onclick="resetAndRestart()">再来一局</button>
+</div>
+
+<!-- 失败 -->
+<div id="lose-overlay" class="overlay">
+  <h2 style="color:#f44">被敌人击败</h2>
+  <div class="info" id="lose-info"></div>
+  <button onclick="resetAndRestart()">重新开始</button>
+</div>
+
+<script>
+// ============================================================
+// 第6章:全局常驻运行状态追踪器 (GlobalRunTracker)
+// 整个 Run 期间单例存在,跨关卡不销毁
+// ============================================================
+const TILE = { C1:1, C2:2, C3:3, C4:4, SPECIAL:5, BOMB_ROW:6, BOMB_COL:7, BOMB_ALL:8 };
+const TILE_NAMES = { 1:'Color1', 2:'Color2', 3:'Color3', 4:'Color4', 5:'Special', 6:'行爆', 7:'列爆', 8:'全清' };
+const TILE_COLORS = { 1:'#ff4444', 2:'#44aaff', 3:'#44ff88', 4:'#cc8844', 5:'#ff00ff', 6:'#ffaa00', 7:'#00aaff', 8:'#ff00ff' };
+const TILE_LABELS = { 1:'1', 2:'2', 3:'3', 4:'4', 5:'*', 6:'R', 7:'C', 8:'A' };
+
+// 常驻全局变量 (跨关卡)
+let stageIndex = 0;
+let playerDeck = [];           // 唯一真理源:常驻玩家方块堆
+let globalDeltaBase = 0;       // 永久 Base 加成
+let globalDeltaMult = 0;       // 永久 Mult 加成
+let globalFlatDmg = 0;         // 永久 Flat 加成
+let baseTimeBonus = 0;         // 永久时间加成
+let timeRecoveryBonus = 0;     // 永久时间恢复加成 (子弹时间)
+let acquiredRelics = [];       // 已获得圣遗物
+
+// 玩家HP (跨关卡保留)
+let playerHP = 30;
+const PLAYER_MAX_HP = 30;
+
+// 当前战斗变量
+let activePool = [];           // 即时运行池
+let grid = [];
+let gridSize = 5;
+let selectedCell = null;
+let timeLeft = 3.0;
+let baseTime = 3.0;
+let isPlaying = false;
+let isPaused = false;
+let comboCount = 0;
+let lastTimestamp = 0;
+let isProcessing = false;
+let animatingCells = [];
+let bossHP = 100;
+let bossMaxHP = 100;
+let totalStageDamage = 0;
+let totalRunDamage = 0;
+let lastOverflowDamage = 0;    // 最后一次攻击的溢出伤害量 (用于圣遗物B)
+
+// 炸弹道具计数 (用于圣遗物A: 炸弹吞噬)
+let stageBombRowClear = 0;     // 行/列炸弹回收计数
+let stageBombAllClear = 0;     // 全清炸弹回收计数
+
+// ============================================================
+// 1.2 关卡序列配置数组
+// ============================================================
+const STAGES = [
+  { id:1, type:'minion', name:'小怪1', hp:100,  attackDmg:1,  hasRelicReward:false },
+  { id:2, type:'minion', name:'小怪2', hp:200, attackDmg:1,  hasRelicReward:true  },
+  { id:3, type:'minion', name:'小怪3', hp:300, attackDmg:2,  hasRelicReward:false },
+  { id:4, type:'boss',   name:'Boss1', hp:400, attackDmg:4,  hasRelicReward:true  },
+  { id:5, type:'minion', name:'小怪4', hp:500, attackDmg:3,  hasRelicReward:false },
+  { id:6, type:'minion', name:'小怪5', hp:600, attackDmg:3,  hasRelicReward:true  },
+  { id:7, type:'minion', name:'小怪6', hp:700, attackDmg:4,  hasRelicReward:false },
+  { id:8, type:'boss',   name:'Boss2', hp:1000, attackDmg:5, hasRelicReward:false },
+];
+
+// ============================================================
+// 2.1 玩家方块堆初始化
+// ============================================================
+function getBaseCountPerColor(N) {
+  const map = { 5:15, 6:22, 7:30, 8:39, 9:50, 10:60 };
+  return map[N] || 15;
+}
+
+function initPlayerDeck(N) {
+  playerDeck = [];
+  const perColor = getBaseCountPerColor(N);
+  for (let i = 0; i < perColor; i++) {
+    playerDeck.push(TILE.C1);
+    playerDeck.push(TILE.C2);
+    playerDeck.push(TILE.C3);
+    playerDeck.push(TILE.C4);
+  }
+  recalcSpecialTiles();
+}
+
+function recalcSpecialTiles() {
+  // 先移除所有特殊方块
+  playerDeck = playerDeck.filter(t => t !== TILE.SPECIAL);
+  const totalBasic = playerDeck.length;
+  const targetSpecial = Math.max(1, Math.round(totalBasic * 0.01));
+  for (let i = 0; i < targetSpecial; i++) {
+    playerDeck.push(TILE.SPECIAL);
+  }
+}
+
+// 2.2 动态卡组构筑:给常驻卡组永久增加某个颜色
+function addTilesToDeck(tileType, amount) {
+  for (let i = 0; i < amount; i++) {
+    playerDeck.push(tileType);
+  }
+  recalcSpecialTiles();
+}
+
+// 2.3 Refill:深拷贝玩家常驻卡组到运行池
+function refillActivePool() {
+  activePool = [...playerDeck];
+}
+
+// 2.3 不放回抽块
+function drawFromPool() {
+  if (activePool.length <= 15) {
+    refillActivePool();
+  }
+  const idx = Math.floor(Math.random() * activePool.length);
+  const tile = activePool[idx];
+  activePool.splice(idx, 1);
+  return tile;
+}
+
+// ============================================================
+// 2.4 防自爆开局算法
+// ============================================================
+function generateSafeOpeningBoard() {
+  // 一次性从 Active Pool 弹出 N*N 个方块
+  const tiles = [];
+  for (let i = 0; i < gridSize * gridSize; i++) {
+    tiles.push(drawFromPool());
+  }
+  // 打乱直到满足条件
+  let attempts = 0;
+  while (attempts < 100) {
+    shuffleArray(tiles);
+    // 填入 grid 检查
+    const testGrid = [];
+    for (let r = 0; r < gridSize; r++) {
+      testGrid[r] = [];
+      for (let c = 0; c < gridSize; c++) {
+        testGrid[r][c] = tiles[r * gridSize + c];
+      }
+    }
+    if (!hasAutoMatch(testGrid) && hasValidMovesOnGrid(testGrid)) {
+      // 满足条件
+      grid = testGrid;
+      return;
+    }
+    attempts++;
+  }
+  // 兜底:直接赋值
+  grid = [];
+  for (let r = 0; r < gridSize; r++) {
+    grid[r] = [];
+    for (let c = 0; c < gridSize; c++) {
+      grid[r][c] = tiles[r * gridSize + c];
+    }
+  }
+}
+
+function hasAutoMatch(testGrid) {
+  for (let r = 0; r < gridSize; r++) {
+    for (let c = 0; c < gridSize - 2; c++) {
+      const t = testGrid[r][c];
+      if (!t || t === TILE.SPECIAL || t >= TILE.BOMB_ROW) continue;
+      if (testGrid[r][c+1] === t && testGrid[r][c+2] === t) return true;
+    }
+  }
+  for (let c = 0; c < gridSize; c++) {
+    for (let r = 0; r < gridSize - 2; r++) {
+      const t = testGrid[r][c];
+      if (!t || t === TILE.SPECIAL || t >= TILE.BOMB_ROW) continue;
+      if (testGrid[r+1][c] === t && testGrid[r+2][c] === t) return true;
+    }
+  }
+  return false;
+}
+
+function shuffleArray(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+}
+
+// ============================================================
+// 第3章:时间控制与死局处理系统
+// ============================================================
+async function handleDeadlock() {
+  // ① 暂停倒计时
+  isPaused = true;
+  // ② 全局洗牌:仅将盘面 N*N 方块坐标打乱
+  const allTiles = [];
+  for (let r = 0; r < gridSize; r++) {
+    for (let c = 0; c < gridSize; c++) {
+      allTiles.push(grid[r][c]);
+    }
+  }
+  shuffleArray(allTiles);
+  let idx = 0;
+  for (let r = 0; r < gridSize; r++) {
+    for (let c = 0; c < gridSize; c++) {
+      grid[r][c] = allTiles[idx++];
+    }
+  }
+  // ③ 补偿 1.0 秒
+  timeLeft += 1.0;
+  showToast('死局洗牌! +1.0s 补偿');
+  drawGrid();
+  // 如果洗牌产生了新的匹配,自动处理
+  const autoMatches = findAllMatches();
+  if (autoMatches.length > 0) {
+    await processDeadlockMatches(autoMatches);
+  }
+  // ④ 恢复倒计时
+  isPaused = false;
+  drawGrid();
+}
+
+// 处理死局洗牌后因随机产生的自动匹配（不计 combo,不生成炸弹）
+async function processDeadlockMatches(matches) {
+  while (matches.length > 0) {
+    for (const m of matches) { grid[m.r][m.c] = null; }
+    applyGravity();
+    fillEmptyFromPool();
+    drawGrid();
+    await sleep(60);
+    matches = findAllMatches();
+  }
+}
+
+// ============================================================
+// 棋盘相关
+// ============================================================
+function hasValidMovesOnGrid(testGrid) {
+  for (let r = 0; r < gridSize; r++) {
+    for (let c = 0; c < gridSize; c++) {
+      if (c + 1 < gridSize) {
+        [testGrid[r][c], testGrid[r][c+1]] = [testGrid[r][c+1], testGrid[r][c]];
+        const has = findAllMatchesOnGrid(testGrid).length > 0;
+        [testGrid[r][c], testGrid[r][c+1]] = [testGrid[r][c+1], testGrid[r][c]];
+        if (has) return true;
+      }
+      if (r + 1 < gridSize) {
+        [testGrid[r][c], testGrid[r+1][c]] = [testGrid[r+1][c], testGrid[r][c]];
+        const has = findAllMatchesOnGrid(testGrid).length > 0;
+        [testGrid[r][c], testGrid[r+1][c]] = [testGrid[r+1][c], testGrid[r][c]];
+        if (has) return true;
+      }
+    }
+  }
+  return false;
+}
+
+function hasValidMoves() {
+  return hasValidMovesOnGrid(grid);
+}
+
+function findAllMatchesOnGrid(g) {
+  const matched = new Set();
+  // 水平检测
+  for (let r = 0; r < gridSize; r++) {
+    for (let c = 0; c < gridSize - 2; c++) {
+      const bt = g[r][c];
+      if (!bt || bt === TILE.SPECIAL || bt >= TILE.BOMB_ROW) continue;
+      if (g[r][c+1] === bt && g[r][c+2] === bt) {
+        let cnt = 3;
+        while (c + cnt < gridSize && g[r][c+cnt] === bt) cnt++;
+        for (let i = 0; i < cnt; i++) matched.add(`${r},${c+i}`);
+        c += cnt - 1;
+      }
+    }
+  }
+  // 垂直检测
+  for (let c = 0; c < gridSize; c++) {
+    for (let r = 0; r < gridSize - 2; r++) {
+      const bt = g[r][c];
+      if (!bt || bt === TILE.SPECIAL || bt >= TILE.BOMB_ROW) continue;
+      if (g[r+1][c] === bt && g[r+2][c] === bt) {
+        let cnt = 3;
+        while (r + cnt < gridSize && g[r+cnt][c] === bt) cnt++;
+        for (let i = 0; i < cnt; i++) matched.add(`${r+i},${c}`);
+        r += cnt - 1;
+      }
+    }
+  }
+  return [...matched].map(s => { const [r,c] = s.split(',').map(Number); return {r,c}; });
+}
+
+function findAllMatches() {
+  return findAllMatchesOnGrid(grid);
+}
+
+function detectSpecialMatches(matches) {
+  const mm = {};
+  matches.forEach(m => mm[`${m.r},${m.c}`] = true);
+  const bombs = [];
+  const proc = new Set();
+
+  function addBomb(r, c, dr, dc, count) {
+    const br = r + dr * Math.floor(count / 2);
+    const bc = c + dc * Math.floor(count / 2);
+    const key = `${br},${bc}`;
+    if (proc.has(key)) return;
+    proc.add(key);
+    const gridType = grid[r][c];
+    if (count === 4) {
+      bombs.push({ type: dr === 0 ? 'bomb_col' : 'bomb_row', r: br, c: bc, gridType });
+    } else if (count >= 5) {
+      bombs.push({ type: 'bomb_all', r: br, c: bc, gridType });
+    }
+  }
+
+  // 水平方向
+  for (let r = 0; r < gridSize; r++) {
+    let c = 0;
+    while (c < gridSize) {
+      const bt = grid[r][c];
+      if (!bt || bt >= TILE.BOMB_ROW || !mm[`${r},${c}`]) { c++; continue; }
+      let cnt = 1;
+      while (c + cnt < gridSize && grid[r][c + cnt] === bt && mm[`${r},${c + cnt}`]) cnt++;
+      if (cnt >= 4) addBomb(r, c, 0, 1, cnt);
+      c += cnt;
+    }
+  }
+  // 垂直方向
+  for (let c = 0; c < gridSize; c++) {
+    let r = 0;
+    while (r < gridSize) {
+      const bt = grid[r][c];
+      if (!bt || bt >= TILE.BOMB_ROW || !mm[`${r},${c}`]) { r++; continue; }
+      let cnt = 1;
+      while (r + cnt < gridSize && grid[r + cnt][c] === bt && mm[`${r + cnt},${c}`]) cnt++;
+      if (cnt >= 4) addBomb(r, c, 1, 0, cnt);
+      r += cnt;
+    }
+  }
+  return bombs;
+}
+
+function swapCells(r1, c1, r2, c2) {
+  [grid[r1][c1], grid[r2][c2]] = [grid[r2][c2], grid[r1][c1]];
+}
+
+function isValidSwap(r1, c1, r2, c2) {
+  return Math.abs(r1-r2) + Math.abs(c1-c2) === 1;
+}
+
+// ============================================================
+// 炸弹道具激活
+// ============================================================
+async function activateBomb(r, c, bombType) {
+  if (isProcessing) return;
+  isProcessing = true;
+  const cleared = [];
+  if (bombType === TILE.BOMB_ROW) {
+    for (let cc = 0; cc < gridSize; cc++) {
+      if (grid[r][cc] !== null) cleared.push({ r, c: cc });
+    }
+  } else if (bombType === TILE.BOMB_COL) {
+    for (let rr = 0; rr < gridSize; rr++) {
+      if (grid[rr][c] !== null) cleared.push({ r: rr, c });
+    }
+  } else if (bombType === TILE.BOMB_ALL) {
+    // 找到周边最多的颜色来清除
+    const colorCount = {};
+    for (const [nr, nc] of getNeighbors(r, c)) {
+      const t = grid[nr][nc];
+      if (t && t >= 1 && t <= 4) colorCount[t] = (colorCount[t] || 0) + 1;
+    }
+    let targetColor = 1;
+    let maxCount = 0;
+    for (const [col, cnt] of Object.entries(colorCount)) {
+      if (cnt > maxCount) { maxCount = cnt; targetColor = parseInt(col); }
+    }
+    for (let rr = 0; rr < gridSize; rr++) {
+      for (let cc = 0; cc < gridSize; cc++) {
+        if (grid[rr][cc] === targetColor) cleared.push({ r: rr, c: cc });
+      }
+    }
+  }
+
+  // 清除格子和炸弹本身
+  grid[r][c] = null;
+  for (const m of cleared) {
+    if (grid[m.r][m.c] === TILE.SPECIAL) {
+      playerHP = Math.min(PLAYER_MAX_HP, playerHP + 10);
+      updatePlayerHPDisplay();
+    }
+    grid[m.r][m.c] = null;
+  }
+  const totalCleared = 1 + cleared.length;
+
+  showToast(`炸弹引爆! 清除 ${totalCleared} 格`);
+  animatingCells = cleared.concat([{ r, c }]);
+  drawGrid();
+  await sleep(100);
+
+  // 炸弹造成伤害
+  let base = totalCleared;
+  let mult = 1.0;
+  if (hasRelic('lucky_bomb')) {
+    base = 0;
+    for (let i = 0; i < totalCleared; i++) base += Math.floor(Math.random() * 20) + 1;
+  }
+  if (hasRelic('countdown')) {
+    if (timeLeft <= 3.0) mult *= 2;
+    else mult *= 0.5;
+  }
+  const bombDamage = Math.floor(
+    (base + globalDeltaBase) * (mult + globalDeltaMult) + globalFlatDmg
+  );
+  dealDamage(bombDamage);
+  if (!isPlaying) { isProcessing = false; return; }
+
+  applyGravity();
+  drawGrid();
+  await sleep(80);
+  fillEmptyFromPool();
+  drawGrid();
+  await sleep(60);
+  animatingCells = [];
+  isProcessing = false;
+
+  // 检查是否有新匹配
+  const newMatches = findAllMatches();
+  if (newMatches.length > 0) {
+    await processMatchChain(newMatches);
+  }
+}
+
+function getNeighbors(r, c) {
+  const res = [];
+  if (r > 0) res.push([r - 1, c]);
+  if (r < gridSize - 1) res.push([r + 1, c]);
+  if (c > 0) res.push([r, c - 1]);
+  if (c < gridSize - 1) res.push([r, c + 1]);
+  return res;
+}
+
+// 静默版炸弹激活（时间结束时自动引爆,无toast）
+async function activateBombSilent(r, c, bombType) {
+  const cleared = [];
+  if (bombType === TILE.BOMB_ROW) {
+    for (let cc = 0; cc < gridSize; cc++) {
+      if (grid[r][cc] !== null) cleared.push({ r, c: cc });
+    }
+  } else if (bombType === TILE.BOMB_COL) {
+    for (let rr = 0; rr < gridSize; rr++) {
+      if (grid[rr][c] !== null) cleared.push({ r: rr, c });
+    }
+  } else if (bombType === TILE.BOMB_ALL) {
+    const colorCount = {};
+    for (const [nr, nc] of getNeighbors(r, c)) {
+      const t = grid[nr][nc];
+      if (t && t >= 1 && t <= 4) colorCount[t] = (colorCount[t] || 0) + 1;
+    }
+    let targetColor = 1, maxCount = 0;
+    for (const [col, cnt] of Object.entries(colorCount)) {
+      if (cnt > maxCount) { maxCount = cnt; targetColor = parseInt(col); }
+    }
+    for (let rr = 0; rr < gridSize; rr++) {
+      for (let cc = 0; cc < gridSize; cc++) {
+        if (grid[rr][cc] === targetColor) cleared.push({ r: rr, c: cc });
+      }
+    }
+  }
+  grid[r][c] = null;
+  for (const m of cleared) grid[m.r][m.c] = null;
+  applyGravity();
+  fillEmptyFromPool();
+}
+
+// ============================================================
+// 消除处理
+// ============================================================
+async function processMove(r1, c1, r2, c2) {
+  if (isProcessing || !isValidSwap(r1,c1,r2,c2)) return;
+  isProcessing = true;
+  swapCells(r1, c1, r2, c2);
+  drawGrid();
+  await sleep(60);
+  const matches = findAllMatches();
+  if (matches.length === 0) {
+    swapCells(r1, c1, r2, c2);
+    drawGrid();
+    isProcessing = false;
+    return;
+  }
+  await processMatchChain(matches);
+  isProcessing = false;
+}
+
+async function processMatchChain(initialMatches) {
+  let matches = initialMatches;
+  while (matches.length > 0) {
+    comboCount++;
+    updateComboDisplay();
+
+    const bombs = detectSpecialMatches(matches);
+    // 统计炸弹用于圣遗物A
+    for (const b of bombs) {
+      if (b.type === 'bomb_row' || b.type === 'bomb_col') stageBombRowClear++;
+      else if (b.type === 'bomb_all') stageBombAllClear++;
+    }
+
+    // 收集所有要清除的格子
+    const clearSet = new Set();
+    for (const m of matches) clearSet.add(`${m.r},${m.c}`);
+
+    // 炸弹位置不清除,改为放炸弹
+    const bombPositions = new Set();
+    for (const b of bombs) {
+      bombPositions.add(`${b.r},${b.c}`);
+      clearSet.delete(`${b.r},${b.c}`);
+    }
+
+    // 统计特殊方块消除恢复血量
+    let healCount = 0;
+    for (const key of clearSet) {
+      const [r, c] = key.split(',').map(Number);
+      if (grid[r][c] === TILE.SPECIAL) healCount++;
+      grid[r][c] = null;
+    }
+    // 特殊格子消除恢复10血量
+    if (healCount > 0) {
+      playerHP = Math.min(PLAYER_MAX_HP, playerHP + healCount * 10);
+      updatePlayerHPDisplay();
+      showToast(`特殊格子恢复 +${healCount * 10} HP`);
+    }
+
+    const eliminatedCount = clearSet.size;
+    const bombCount = bombs.length;
+
+    // 放置炸弹
+    for (const b of bombs) {
+      if (b.type === 'bomb_row') grid[b.r][b.c] = TILE.BOMB_ROW;
+      else if (b.type === 'bomb_col') grid[b.r][b.c] = TILE.BOMB_COL;
+      else if (b.type === 'bomb_all') grid[b.r][b.c] = TILE.BOMB_ALL;
+    }
+
+    // 时间恢复:每消除一格 +0.1s,多个同时额外 +0.1s,子弹时间额外
+    let timeRecovery = eliminatedCount * 0.1;
+    if (eliminatedCount > 1) timeRecovery += 0.1;
+    timeRecovery += eliminatedCount * timeRecoveryBonus;
+    timeLeft += timeRecovery;
+
+    const totalElim = eliminatedCount + bombCount; // 炸弹本身也算一次消除
+
+    // 第4章:伤害核心公式
+    let base = totalElim;
+    let mult = 1.0;
+    if (hasRelic('lucky_bomb')) {
+      base = 0;
+      for (let i = 0; i < totalElim; i++) base += Math.floor(Math.random() * 30) + 1;
+    }
+    if (hasRelic('countdown')) {
+      if (timeLeft <= 3.0) mult *= 2;
+      else mult *= 0.5;
+    }
+    const comboMult = 1 + (comboCount - 1) * 0.05;
+    const damage = Math.floor(
+      (base + globalDeltaBase) * (mult + globalDeltaMult) * comboMult + globalFlatDmg
+    );
+    dealDamage(damage);
+    if (!isPlaying) return;
+
+    animatingCells = matches;
+    drawGrid();
+    await sleep(80);
+    applyGravity();
+    drawGrid();
+    await sleep(80);
+    fillEmptyFromPool();
+    drawGrid();
+    await sleep(60);
+    animatingCells = [];
+    if (!isPlaying) return;
+    matches = findAllMatches();
+  }
+  comboCount = 0;
+  updateComboDisplay();
+
+  if (!isPlaying) return;
+  if (findAllMatches().length === 0 && !hasValidMoves()) {
+    await handleDeadlock();
+  }
+}
+
+function applyGravity() {
+  for (let c = 0; c < gridSize; c++) {
+    let wr = gridSize - 1;
+    for (let r = gridSize - 1; r >= 0; r--) {
+      if (grid[r][c] !== null) {
+        if (r !== wr) { grid[wr][c] = grid[r][c]; grid[r][c] = null; }
+        wr--;
+      }
+    }
+  }
+}
+
+function fillEmptyFromPool() {
+  for (let r = 0; r < gridSize; r++) {
+    for (let c = 0; c < gridSize; c++) {
+      if (grid[r][c] === null) {
+        grid[r][c] = drawFromPool();
+      }
+    }
+  }
+}
+
+// ============================================================
+// 第4章:战斗与伤害计算
+// ============================================================
+function dealDamage(damage) {
+  totalStageDamage += damage;
+  totalRunDamage += damage;
+  const dmgPct = damage / bossMaxHP * 100;
+  lastOverflowDamage = Math.max(0, dmgPct - bossHP);
+  bossHP -= dmgPct;
+  if (bossHP <= 0) { bossHP = 0; updateHPDisplay(); gameWin(); return; }
+  updateHPDisplay();
+  showDamageFloat(damage);
+  // 敌人受击动画
+  const sprite = document.getElementById('enemy-sprite');
+  sprite.classList.add('hit');
+  setTimeout(() => sprite.classList.remove('hit'), 100);
+}
+
+function showDamageFloat(damage) {
+  const area = document.getElementById('enemy-area');
+  const div = document.createElement('div');
+  div.className = 'damage-float';
+  div.textContent = damage;
+  div.style.left = (20 + Math.random()*50) + '%';
+  div.style.top = (20 + Math.random()*30) + '%';
+  area.appendChild(div);
+  setTimeout(() => div.remove(), 900);
+}
+
+// ============================================================
+// UI 更新
+// ============================================================
+function updateHPDisplay() {
+  document.getElementById('hp-bar-inner').style.width = bossHP + '%';
+  document.getElementById('hp-text').textContent = `HP ${Math.max(0,Math.ceil(bossHP))}%`;
+  if (bossHP < 30) {
+    document.getElementById('hp-bar-inner').style.background = 'linear-gradient(90deg,#ff0000,#ff2222)';
+  }
+}
+
+function updatePlayerHPDisplay() {
+  const el = document.getElementById('player-hp-text');
+  el.textContent = `${playerHP}/${PLAYER_MAX_HP}`;
+  if (playerHP <= 10) el.style.color = '#f44';
+  else if (playerHP <= 20) el.style.color = '#fa0';
+  else el.style.color = '#4f4';
+}
+
+function updateEnemyAtkDisplay() {
+  const stage = STAGES[stageIndex];
+  document.getElementById('enemy-atk-text').textContent = stage.attackDmg;
+}
+
+function updateComboDisplay() {
+  const d = document.getElementById('combo-display');
+  if (comboCount >= 10) {
+    d.textContent = comboCount + ' Combo!';
+    d.style.color = '#00ffff';
+    d.style.fontSize = '22px';
+  } else if (comboCount > 0) {
+    d.textContent = comboCount + ' Combo';
+    d.style.color = '#ff9800';
+    d.style.fontSize = '18px';
+  } else {
+    d.textContent = '';
+  }
+}
+
+function updateTimerDisplay() {
+  const d = document.getElementById('timer-display');
+  d.textContent = timeLeft.toFixed(1);
+  d.classList.remove('urgent','fever');
+  if (timeLeft <= 1.0) d.classList.add('urgent');
+  if (timeLeft <= 3.0 && hasRelic('countdown')) d.classList.add('fever');
+}
+
+function updateStatsDisplay() {
+  document.getElementById('stat-base').textContent = 10 + globalDeltaBase;
+  document.getElementById('stat-mult').textContent = (1.0 + globalDeltaMult).toFixed(1);
+  document.getElementById('stat-flat').textContent = globalFlatDmg;
+  document.getElementById('stat-time').textContent = baseTime.toFixed(1) + 's';
+  document.getElementById('stat-grid').textContent = gridSize + 'x' + gridSize;
+}
+
+function updateStageDisplay() {
+  const stage = STAGES[stageIndex];
+  document.getElementById('stage-name').textContent = stage.name;
+  document.getElementById('stage-type-badge').textContent = stage.type === 'boss' ? '[BOSS]' : '[小怪]';
+  document.getElementById('stage-num').textContent = `第${stageIndex+1}/${STAGES.length}关`;
+  document.getElementById('enemy-name').textContent = stage.name;
+  const sprite = document.getElementById('enemy-sprite');
+  sprite.textContent = stage.type === 'boss' ? 'BOSS' : 'EN';
+  sprite.classList.toggle('boss', stage.type === 'boss');
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 1600);
+}
+
+function showPlayerAttacked(dmg) {
+  // 红色闪屏
+  const flash = document.getElementById('attack-flash');
+  flash.classList.add('active');
+  setTimeout(() => flash.classList.remove('active'), 150);
+
+  // 画面震动
+  const container = document.getElementById('game-container');
+  container.classList.add('shake');
+  setTimeout(() => container.classList.remove('shake'), 500);
+
+  // 伤害飘字（红色，在顶部HP区域）
+  const topBar = document.getElementById('top-bar');
+  const div = document.createElement('div');
+  div.className = 'damage-float';
+  div.textContent = `-${dmg}`;
+  div.style.color = '#ff3333';
+  div.style.fontSize = '28px';
+  div.style.fontWeight = 'bold';
+  div.style.left = '40%';
+  div.style.top = '10%';
+  document.body.appendChild(div);
+  setTimeout(() => div.remove(), 900);
+}
+
+// ============================================================
+// Canvas 渲染
+// ============================================================
+const canvas = document.getElementById('grid-canvas');
+const ctx = canvas.getContext('2d');
+const MAX_BOARD = 340;
+const PAD = 8;
+const GAP = 3;
+
+function resizeCanvas() {
+  const cellSize = Math.floor(MAX_BOARD / gridSize);
+  canvas.width = gridSize * cellSize + PAD * 2;
+  canvas.height = gridSize * cellSize + PAD * 2;
+  return cellSize;
+}
+
+function drawGrid() {
+  const cellSize = resizeCanvas();
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  for (let r = 0; r < gridSize; r++) {
+    for (let c = 0; c < gridSize; c++) {
+      const x = PAD + c * cellSize;
+      const y = PAD + r * cellSize;
+      const cs = cellSize - GAP;
+
+      const tile = grid[r][c];
+      const isNull = tile === null;
+      const isAnim = animatingCells.some(m => m.r===r && m.c===c);
+      const isSel = selectedCell && selectedCell.r===r && selectedCell.c===c;
+
+      // 背景色
+      if (isNull) {
+        ctx.fillStyle = 'rgba(0,0,0,0.2)';
+      } else if (isAnim) {
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      } else if (tile >= TILE.BOMB_ROW) {
+        // 炸弹道具特殊渲染
+        ctx.fillStyle = TILE_COLORS[tile] || '#ffaa00';
+      } else {
+        ctx.fillStyle = TILE_COLORS[tile] || '#555';
+      }
+
+      const rad = 4;
+      const cx = x + 3, cy = y + 3, cw = cs - 6, ch = cs - 6;
+      ctx.beginPath();
+      ctx.moveTo(cx+rad, cy);
+      ctx.lineTo(cx+cw-rad, cy);
+      ctx.quadraticCurveTo(cx+cw, cy, cx+cw, cy+rad);
+      ctx.lineTo(cx+cw, cy+ch-rad);
+      ctx.quadraticCurveTo(cx+cw, cy+ch, cx+cw-rad, cy+ch);
+      ctx.lineTo(cx+rad, cy+ch);
+      ctx.quadraticCurveTo(cx, cy+ch, cx, cy+ch-rad);
+      ctx.lineTo(cx, cy+rad);
+      ctx.quadraticCurveTo(cx, cy, cx+rad, cy);
+      ctx.closePath();
+      ctx.fill();
+
+      // 炸弹特效:发光边框
+      if (tile !== null && tile >= TILE.BOMB_ROW) {
+        ctx.strokeStyle = '#ffd700';
+        ctx.lineWidth = 3;
+        ctx.shadowColor = tile === TILE.BOMB_ALL ? '#ff00ff' : '#ffd700';
+        ctx.shadowBlur = 10;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      }
+
+      // 选中边框
+      if (isSel && tile !== null) {
+        ctx.strokeStyle = '#ffd700';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+      }
+
+      // 文字
+      if (tile !== null) {
+        ctx.fillStyle = '#fff';
+        ctx.font = `bold ${Math.max(14,cellSize*0.35)}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(TILE_LABELS[tile], x+cs/2, y+cs/2);
+      }
+    }
+  }
+}
+
+// ============================================================
+// 交互
+// ============================================================
+function getCellFromEvent(e) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const mx = (e.clientX - rect.left) * scaleX;
+  const my = (e.clientY - rect.top) * scaleY;
+  const cellSize = Math.floor(MAX_BOARD / gridSize);
+  const c = Math.floor((mx - PAD) / cellSize);
+  const r = Math.floor((my - PAD) / cellSize);
+  return { r, c };
+}
+
+function isBombTile(t) { return t === TILE.BOMB_ROW || t === TILE.BOMB_COL || t === TILE.BOMB_ALL; }
+
+canvas.addEventListener('click', e => {
+  if (!isPlaying || isProcessing || isPaused) return;
+  const { r, c } = getCellFromEvent(e);
+  if (r<0||r>=gridSize||c<0||c>=gridSize||grid[r][c]===null) return;
+
+  const tile = grid[r][c];
+  // 点击炸弹道具:直接激活
+  if (isBombTile(tile) && !selectedCell) {
+    activateBomb(r, c, tile);
+    return;
+  }
+
+  if (!selectedCell) {
+    if (!isBombTile(tile)) selectedCell = { r, c };
+  } else if (selectedCell.r===r && selectedCell.c===c) {
+    selectedCell = null;
+  } else if (isValidSwap(selectedCell.r, selectedCell.c, r, c) && !isBombTile(tile)) {
+    const sr=selectedCell.r, sc=selectedCell.c;
+    selectedCell = null;
+    processMove(sr, sc, r, c);
+  } else {
+    if (!isBombTile(tile)) selectedCell = { r, c };
+    else selectedCell = null;
+  }
+  drawGrid();
+});
+
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  if (!isPlaying || isProcessing || isPaused) return;
+  const { r, c } = getCellFromEvent(e.touches[0]);
+  if (r<0||r>=gridSize||c<0||c>=gridSize||grid[r][c]===null) return;
+
+  const tile = grid[r][c];
+  if (isBombTile(tile) && !selectedCell) {
+    activateBomb(r, c, tile);
+    return;
+  }
+
+  if (!selectedCell) {
+    if (!isBombTile(tile)) selectedCell = { r, c };
+  } else if (selectedCell.r===r && selectedCell.c===c) {
+    selectedCell = null;
+  } else if (isValidSwap(selectedCell.r, selectedCell.c, r, c) && !isBombTile(tile)) {
+    const sr=selectedCell.r, sc=selectedCell.c;
+    selectedCell = null;
+    processMove(sr, sc, r, c);
+  } else {
+    if (!isBombTile(tile)) selectedCell = { r, c };
+    else selectedCell = null;
+  }
+  drawGrid();
+}, { passive: false });
+
+// 键盘
+document.addEventListener('keydown', e => {
+  if (!isPlaying || isProcessing || !selectedCell) return;
+  let nr=selectedCell.r, nc=selectedCell.c;
+  switch(e.key){
+    case 'ArrowUp':nr--;break;
+    case 'ArrowDown':nr++;break;
+    case 'ArrowLeft':nc--;break;
+    case 'ArrowRight':nc++;break;
+    default:return;
+  }
+  if (nr<0||nr>=gridSize||nc<0||nc>=gridSize||grid[nr][nc]===null) return;
+  const sr=selectedCell.r, sc=selectedCell.c;
+  selectedCell = null;
+  processMove(sr, sc, nr, nc);
+  drawGrid();
+});
+
+// ============================================================
+// 游戏循环
+// ============================================================
+function gameLoop(ts) {
+  if (!isPlaying) { requestAnimationFrame(gameLoop); return; }
+  if (!lastTimestamp) lastTimestamp = ts;
+  let dt = (ts - lastTimestamp) / 1000;
+  lastTimestamp = ts;
+
+  // 限制最大 dt 防止跳帧
+  if (dt > 0.2) dt = 0.2;
+
+  if (!isPaused && !isProcessing) {
+    timeLeft -= dt;
+    if (timeLeft <= 0) {
+      timeLeft = 0;
+      updateTimerDisplay();
+      handleTimeEnd();
+      return;
+    }
+  }
+  updateTimerDisplay();
+  requestAnimationFrame(gameLoop);
+}
+
+async function handleTimeEnd() {
+  isPaused = true;
+  // 收集盘面上所有未使用的炸弹
+  const bombsOnBoard = [];
+  for (let r = 0; r < gridSize; r++) {
+    for (let c = 0; c < gridSize; c++) {
+      const t = grid[r][c];
+      if (isBombTile(t)) bombsOnBoard.push({ r, c, type: t });
+    }
+  }
+
+  if (hasRelic('bomb_devour') && bombsOnBoard.length > 0) {
+    // 圣遗物A: 炸弹吞噬 - 回收炸弹（stage计数器已记录,gameWin时统一结算）
+    for (const b of bombsOnBoard) {
+      grid[b.r][b.c] = null;
+    }
+    showToast(`炸弹吞噬: 回收了 ${bombsOnBoard.length} 个未使用炸弹`);
+    applyGravity();
+    fillEmptyFromPool();
+  } else if (bombsOnBoard.length > 0) {
+    // 没有圣遗物A: 自动引爆所有炸弹（一次性处理所有清除,避免坐标偏移）
+    showToast(`时间到! 自动引爆 ${bombsOnBoard.length} 个炸弹`);
+    const allCleared = new Set();
+    for (const b of bombsOnBoard) {
+      allCleared.add(`${b.r},${b.c}`);
+      if (b.type === TILE.BOMB_ROW) {
+        for (let cc = 0; cc < gridSize; cc++) allCleared.add(`${b.r},${cc}`);
+      } else if (b.type === TILE.BOMB_COL) {
+        for (let rr = 0; rr < gridSize; rr++) allCleared.add(`${rr},${b.c}`);
+      } else if (b.type === TILE.BOMB_ALL) {
+        const colorCount = {};
+        for (const [nr, nc] of getNeighbors(b.r, b.c)) {
+          const t = grid[nr][nc];
+          if (t && t >= 1 && t <= 4) colorCount[t] = (colorCount[t] || 0) + 1;
+        }
+        let targetColor = 1, maxCount = 0;
+        for (const [col, cnt] of Object.entries(colorCount)) {
+          if (cnt > maxCount) { maxCount = cnt; targetColor = parseInt(col); }
+        }
+        for (let rr = 0; rr < gridSize; rr++)
+          for (let cc = 0; cc < gridSize; cc++)
+            if (grid[rr][cc] === targetColor) allCleared.add(`${rr},${cc}`);
+      }
+    }
+    let healCount = 0;
+    for (const key of allCleared) {
+      const [rr, cc] = key.split(',').map(Number);
+      if (grid[rr][cc] === TILE.SPECIAL) healCount++;
+      grid[rr][cc] = null;
+    }
+    if (healCount > 0) {
+      playerHP = Math.min(PLAYER_MAX_HP, playerHP + healCount * 10);
+      updatePlayerHPDisplay();
+    }
+    applyGravity();
+    fillEmptyFromPool();
+
+    // 自动引爆造成伤害
+    const autoClearCount = allCleared.size;
+    let base = autoClearCount;
+    let mult = 1.0;
+    if (hasRelic('lucky_bomb')) {
+      base = 0;
+      for (let i = 0; i < autoClearCount; i++) base += Math.floor(Math.random() * 30) + 1;
+    }
+    if (hasRelic('countdown')) {
+      mult *= 2; // 时间到 timeLeft=0 <= 3
+    }
+    const autoDamage = Math.floor(
+      (base + globalDeltaBase) * (mult + globalDeltaMult) + globalFlatDmg
+    );
+    dealDamage(autoDamage);
+    if (!isPlaying) { isPaused = false; return; }
+  }
+
+  drawGrid();
+  updateStatsDisplay();
+
+  // 敌人攻击玩家
+  const stage = STAGES[stageIndex];
+  showPlayerAttacked(stage.attackDmg);
+  playerHP -= stage.attackDmg;
+  updatePlayerHPDisplay();
+  showToast(`敌人攻击! -${stage.attackDmg} HP (剩余 ${playerHP}/${PLAYER_MAX_HP})`);
+
+  if (playerHP <= 0) {
+    playerHP = 0;
+    updatePlayerHPDisplay();
+    isPlaying = false;
+    isPaused = false;
+    document.getElementById('lose-overlay').style.display = 'flex';
+    document.getElementById('lose-info').innerHTML =
+      `到达第 ${stageIndex+1} 关<br>累计总伤害: ${totalRunDamage}<br>被敌人击败`;
+    return;
+  }
+
+  // 重置计时器继续
+  baseTime = 4.0 + baseTimeBonus;
+  timeLeft = baseTime;
+  updateTimerDisplay();
+  isPaused = false;
+  lastTimestamp = 0;
+  requestAnimationFrame(gameLoop);
+}
+
+// ============================================================
+// 游戏流程
+// ============================================================
+function beginRun() {
+  document.getElementById('start-overlay').style.display = 'none';
+  stageIndex = 0;
+  gridSize = 5;
+  globalDeltaBase = 0;
+  globalDeltaMult = 0;
+  globalFlatDmg = 0;
+  baseTimeBonus = 0;
+  timeRecoveryBonus = 0;
+  acquiredRelics = [];
+  totalRunDamage = 0;
+  playerHP = PLAYER_MAX_HP;
+  baseTime = 3.0 + baseTimeBonus;
+  initPlayerDeck(gridSize);
+  startStage();
+}
+
+function startStage() {
+  const stage = STAGES[stageIndex];
+  bossMaxHP = stage.hp;
+  bossHP = 100;
+  totalStageDamage = 0;
+  comboCount = 0;
+  stageBombRowClear = 0;
+  stageBombAllClear = 0;
+  lastOverflowDamage = 0;
+  isProcessing = false;
+  selectedCell = null;
+  animatingCells = [];
+  isPaused = false;
+  baseTime = 3.0 + baseTimeBonus;
+  timeLeft = baseTime;
+
+  // 深拷贝 Player Deck 到 Active Pool
+  refillActivePool();
+  // 防自爆开局
+  generateSafeOpeningBoard();
+
+  updateHPDisplay();
+  updatePlayerHPDisplay();
+  updateEnemyAtkDisplay();
+  updateComboDisplay();
+  updateTimerDisplay();
+  updateStatsDisplay();
+  updateStageDisplay();
+  drawGrid();
+
+  document.getElementById('win-overlay').style.display = 'none';
+  document.getElementById('buff-overlay').style.display = 'none';
+  document.getElementById('relic-overlay').style.display = 'none';
+  document.getElementById('complete-overlay').style.display = 'none';
+  document.getElementById('lose-overlay').style.display = 'none';
+
+  isPlaying = true;
+  lastTimestamp = 0;
+  requestAnimationFrame(gameLoop);
+}
+
+function gameWin() {
+  isPlaying = false;
+
+  // 收集盘面上剩余炸弹
+  let remainingRowCol = 0, remainingAll = 0;
+  for (let r = 0; r < gridSize; r++) {
+    for (let c = 0; c < gridSize; c++) {
+      const t = grid[r][c];
+      if (t === TILE.BOMB_ROW || t === TILE.BOMB_COL) remainingRowCol++;
+      else if (t === TILE.BOMB_ALL) remainingAll++;
+    }
+  }
+
+  // 圣遗物A: 炸弹吞噬 - 结算时回收所有炸弹
+  if (hasRelic('bomb_devour')) {
+    const totalRowCol = stageBombRowClear + remainingRowCol;
+    const totalAll = stageBombAllClear + remainingAll;
+    if (totalRowCol > 0) globalDeltaBase += totalRowCol * 2;
+    if (totalAll > 0) globalDeltaMult += totalAll * 0.2;
+    showToast(`炸弹吞噬: Base+${totalRowCol*2}, Mult+${(totalAll*0.2).toFixed(1)}`);
+  }
+
+  // 圣遗物B: 伤害溢出 - 5% 溢出伤害转 Flat
+  if (hasRelic('overflow') && lastOverflowDamage > 0) {
+    const overflowDamage = lastOverflowDamage / 100 * bossMaxHP;
+    const overflow = Math.floor(overflowDamage * 0.05);
+    if (overflow > 0) {
+      globalFlatDmg += overflow;
+      showToast(`伤害溢出: Flat+${overflow}`);
+    }
+  }
+
+  updateStatsDisplay();
+  document.getElementById('win-info').innerHTML =
+    `造成伤害: ${totalStageDamage}<br>累计伤害: ${totalRunDamage}<br>剩余时间: ${timeLeft.toFixed(1)}s<br>剩余HP: ${playerHP}/${PLAYER_MAX_HP}`;
+  document.getElementById('win-overlay').style.display = 'flex';
+}
+
+function proceedToRewards() {
+  document.getElementById('win-overlay').style.display = 'none';
+  const stage = STAGES[stageIndex];
+  // 1. 必定触发:加成 3选1
+  showBuffChoice(stage.hasRelicReward);
+}
+
+function showBuffChoice(hasRelicNext) {
+  const pool = getRandomBuffs(3);
+  const container = document.getElementById('buff-choices');
+  container.innerHTML = pool.map((b,i) =>
+    `<button class="choice-btn buff-btn" onclick="selectBuff(${i},${hasRelicNext})">
+      ${b.name}<span class="desc">${b.desc}</span>
+    </button>`
+  ).join('');
+  document.getElementById('buff-overlay').style.display = 'flex';
+  window._buffChoices = pool;
+  window._hasRelicNext = hasRelicNext;
+}
+
+function selectBuff(idx, hasRelicNext) {
+  const choice = window._buffChoices[idx];
+  choice.apply();
+  document.getElementById('buff-overlay').style.display = 'none';
+  updateStatsDisplay();
+  showToast('获得: ' + choice.name);
+
+  if (hasRelicNext) {
+    showRelicChoice();
+  } else {
+    advanceStage();
+  }
+}
+
+function showRelicChoice() {
+  const available = getRandomRelics(2);
+  if (available.length === 0) { advanceStage(); return; }
+  const container = document.getElementById('relic-choices');
+  container.innerHTML = available.map((r,i) =>
+    `<button class="choice-btn relic-btn" onclick="selectRelic(${i})">
+      ${r.name}<span class="desc">${r.desc}</span>
+    </button>`
+  ).join('');
+  document.getElementById('relic-overlay').style.display = 'flex';
+  window._relicChoices = available;
+}
+
+function selectRelic(idx) {
+  const choice = window._relicChoices[idx];
+  acquiredRelics.push(choice.id);
+  document.getElementById('relic-overlay').style.display = 'none';
+  updateStatsDisplay();
+  showToast('获得圣遗物: ' + choice.name);
+  advanceStage();
+}
+
+function advanceStage() {
+  stageIndex++;
+  if (stageIndex >= STAGES.length) {
+    // 全部通关
+    document.getElementById('complete-info').innerHTML =
+      `通关全部 ${STAGES.length} 关!<br>累计总伤害: ${totalRunDamage}<br>
+      最终属性: Base=${10+globalDeltaBase} Mult=${(1+globalDeltaMult).toFixed(1)} Flat=${globalFlatDmg}`;
+    document.getElementById('complete-overlay').style.display = 'flex';
+    return;
+  }
+  startStage();
+}
+
+function resetAndRestart() {
+  document.getElementById('complete-overlay').style.display = 'none';
+  document.getElementById('lose-overlay').style.display = 'none';
+  beginRun();
+}
+
+// ============================================================
+// 5.1 圣遗物库
+// ============================================================
+const RELIC_DEFS = [
+  {
+    id: 'bomb_devour', name: '炸弹吞噬',
+    desc: '合成的特殊炸弹不引爆,结算时回收: 行/列炸弹 Base+2,全清炸弹 Mult+0.2',
+  },
+  {
+    id: 'overflow', name: '伤害溢出',
+    desc: '击杀敌人时,溢出伤害的5%转化为永久Flat伤害',
+  },
+  {
+    id: 'lucky_bomb', name: '幸运炸弹',
+    desc: '每次消除的伤害在1~20之间随机滚动',
+  },
+  {
+    id: 'countdown', name: '倒计时',
+    desc: '剩余时间<=3s伤害翻倍,>3s伤害减半',
+  },
+];
+
+function getRandomRelics(n) {
+  const available = RELIC_DEFS.filter(r => !acquiredRelics.includes(r.id));
+  const shuffled = [...available];
+  shuffleArray(shuffled);
+  return shuffled.slice(0, Math.min(n, shuffled.length));
+}
+
+function hasRelic(id) {
+  return acquiredRelics.includes(id);
+}
+
+// ============================================================
+// 5.2 加成库
+// ============================================================
+const BUFF_DEFS = [
+  {
+    id: 'prob_color1', name: 'Color1 增加',
+    desc: '向Player Deck中增加3个Color1方块',
+    apply() { addTilesToDeck(TILE.C1, 3); },
+  },
+  {
+    id: 'base_up', name: '伤害增加',
+    desc: '全局Base +10',
+    apply() { globalDeltaBase += 10; },
+  },
+  {
+    id: 'mult_up', name: '倍率增加',
+    desc: '全局Mult +0.5',
+    apply() { globalDeltaMult += 0.5; },
+  },
+  {
+    id: 'flat_up', name: '固定伤害增加',
+    desc: '全局Flat Damage +50',
+    apply() { globalFlatDmg += 50; },
+  },
+  {
+    id: 'time_up', name: '时间增加',
+    desc: '初始倒计时 +2s',
+    apply() { baseTimeBonus += 2; baseTime = 3.0 + baseTimeBonus; },
+  },
+  {
+    id: 'bullet_time', name: '子弹时间',
+    desc: '每消除一格额外恢复 +0.1s',
+    apply() { timeRecoveryBonus += 0.1; },
+  },
+  {
+    id: 'grid_up', name: '局面增大',
+    desc: '棋盘大小增大一圈 (最大10x10)，初始方块数同步提升',
+    apply() {
+      if (gridSize < 10) {
+        gridSize++;
+        initPlayerDeck(gridSize);
+        updateStatsDisplay();
+      }
+    },
+  },
+];
+
+function getRandomBuffs(n) {
+  const shuffled = [...BUFF_DEFS];
+  shuffleArray(shuffled);
+  return shuffled.slice(0, n);
+}
+
+// ============================================================
+// 初始化渲染
+// ============================================================
+resizeCanvas();
+drawGrid();
+updateStageDisplay();
+updateStatsDisplay();
+</script>
+</body>
+</html>
